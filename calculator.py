@@ -61,7 +61,7 @@ class EngineeringCalculator:
             ('Complex', 8, 3, 1), ('SpecialFunc', 8, 4, 1),
             ('SysNonlinearEq', 9, 0, 1), ('Optimize', 9, 1, 1),
             ('Polynomials', 9, 2, 1), ('History', 9, 3, 1), ('Vars', 9, 4, 1),
-            ('Settings', 10, 0, 1), ('ProbDist', 10, 1, 2),
+            ('Settings', 10, 0, 1), ('ProbDist', 10, 1, 1), ('FFT', 10, 2, 1),
             ('CivilEng', 10, 3, 2) # Added Civil Engineering button
         ]
 
@@ -129,6 +129,8 @@ class EngineeringCalculator:
                 action = self.open_settings_window
             elif text == 'ProbDist':
                 action = self.open_prob_dist_window
+            elif text == 'FFT':
+                action = self.open_fourier_analysis_window
             elif text == 'CivilEng':
                 action = self.open_civil_engineering_window
             else: # Standard calculator buttons
@@ -263,6 +265,141 @@ class EngineeringCalculator:
 
         self.matrix_result_text = tk.Text(result_frame, height=15, width=60, state='disabled', font=('Arial', 12)) # Increased height
         self.matrix_result_text.pack(padx=5, pady=5, fill="both", expand=True)
+
+    def open_fourier_analysis_window(self):
+        self.fft_window = tk.Toplevel(self.master)
+        self.fft_window.title("تحلیل فوریه (FFT)")
+        self.fft_window.geometry("800x700")
+
+        # --- Input Frame ---
+        input_frame = ttk.LabelFrame(self.fft_window, text="ورودی سیگنال و پارامترها")
+        input_frame.pack(padx=10, pady=10, fill="x")
+
+        ttk.Label(input_frame, text="تابع سیگنال f(t) (مثال: np.sin(2*np.pi*5*t) + 0.5*np.sin(2*np.pi*12*t)):").grid(row=0, column=0, columnspan=4, padx=5, pady=2, sticky="w")
+        self.fft_func_entry = ttk.Entry(input_frame, width=70)
+        self.fft_func_entry.grid(row=1, column=0, columnspan=4, padx=5, pady=5, sticky="ew")
+        self.fft_func_entry.insert(0, "np.sin(2*np.pi*5*t) + 0.5*np.sin(2*np.pi*12*t)")
+
+        ttk.Label(input_frame, text="مدت زمان سیگنال (T):").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        self.fft_duration_entry = ttk.Entry(input_frame, width=10)
+        self.fft_duration_entry.grid(row=2, column=1, padx=5, pady=5, sticky="w")
+        self.fft_duration_entry.insert(0, "1.0")
+
+        ttk.Label(input_frame, text="فرکانس نمونه‌برداری (Fs):").grid(row=2, column=2, padx=5, pady=5, sticky="w")
+        self.fft_sampling_rate_entry = ttk.Entry(input_frame, width=10)
+        self.fft_sampling_rate_entry.grid(row=2, column=3, padx=5, pady=5, sticky="w")
+        self.fft_sampling_rate_entry.insert(0, "100")
+
+        input_frame.grid_columnconfigure(0, weight=1) # Allow function entry to expand
+
+        analyze_button = ttk.Button(input_frame, text="تحلیل FFT و رسم نمودار", command=self.perform_fft_analysis)
+        analyze_button.grid(row=3, column=0, columnspan=4, pady=10)
+
+        # --- Plot Area ---
+        self.fft_plot_frame = ttk.Frame(self.fft_window)
+        self.fft_plot_frame.pack(padx=10, pady=10, fill="both", expand=True)
+
+        self.fft_figure = plt.Figure(figsize=(7, 6), dpi=100)
+        self.fft_canvas = FigureCanvasTkAgg(self.fft_figure, master=self.fft_plot_frame)
+        self.fft_canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+    def _display_fft_error(self, message):
+        self.fft_figure.clear()
+        ax = self.fft_figure.add_subplot(111)
+        ax.text(0.5, 0.5, message, ha='center', va='center', color='red', fontsize=12, wrap=True)
+        self.fft_canvas.draw()
+
+
+    def perform_fft_analysis(self):
+        func_str = self.fft_func_entry.get()
+        try:
+            duration = float(self.fft_duration_entry.get())
+            sampling_rate = float(self.fft_sampling_rate_entry.get())
+        except ValueError:
+            self._display_fft_error("خطا: مدت زمان و فرکانس نمونه‌برداری باید اعداد معتبر باشند.")
+            return
+
+        if sampling_rate <= 0 or duration <= 0:
+            self._display_fft_error("خطا: مدت زمان و فرکانس نمونه‌برداری باید مثبت باشند.")
+            return
+
+        # Generate time vector
+        N = int(sampling_rate * duration) # Number of sample points
+        if N < 2:
+            self._display_fft_error("خطا: تعداد نقاط نمونه (Fs * T) بسیار کم است.")
+            return
+
+        t = np.linspace(0.0, duration, N, endpoint=False)
+
+        # Generate signal from user function
+        try:
+            # Use a safe eval context
+            signal_func = lambda t_val: eval(func_str, {"np": np, "t": t_val, "sin": np.sin, "cos": np.cos, "pi": np.pi, "exp": np.exp})
+            signal = signal_func(t)
+        except Exception as e:
+            self._display_fft_error(f"خطا در تولید سیگنال از تابع: {e}\nاز متغیر 't' و توابع numpy مانند np.sin استفاده کنید.")
+            return
+
+        # Perform FFT
+        from scipy.fft import fft, fftfreq
+
+        # fft() computes the one-dimensional discrete Fourier Transform.
+        # fftfreq() returns the sample frequencies.
+        yf = fft(signal)
+        xf = fftfreq(N, 1 / sampling_rate)
+
+        # We are interested in the positive frequency half of the spectrum.
+        # The FFT result is symmetric, so we take the first half.
+        # The amplitude of the FFT is proportional to the number of samples,
+        # so we normalize by N. The factor of 2 is because we are taking only half the spectrum.
+        # The 0-th frequency component (DC offset) is not doubled.
+
+        # Get positive frequencies
+        positive_mask = xf >= 0
+        xf_pos = xf[positive_mask]
+        yf_pos = yf[positive_mask]
+
+        # Calculate amplitude
+        # For a sine wave of amplitude A, the FFT peak is at A*N/2.
+        # So, to get amplitude A, we do 2/N * |Y(f)|.
+        amplitude = 2.0/N * np.abs(yf_pos)
+        amplitude[0] = amplitude[0] / 2 # DC component is not doubled
+
+        # Plotting
+        self.fft_figure.clear()
+
+        # Plot 1: Time domain signal
+        ax1 = self.fft_figure.add_subplot(2, 1, 1)
+        ax1.plot(t, signal)
+        ax1.set_title("سیگنال در حوزه زمان")
+        ax1.set_xlabel("زمان (s)")
+        ax1.set_ylabel("دامنه")
+        ax1.grid(True)
+
+        # Plot 2: Frequency domain (FFT Amplitude Spectrum)
+        ax2 = self.fft_figure.add_subplot(2, 1, 2)
+        # We only need to plot up to the Nyquist frequency, which is Fs/2.
+        # xf_pos already handles this.
+        ax2.plot(xf_pos, amplitude)
+        ax2.set_title("طیف دامنه FFT")
+        ax2.set_xlabel("فرکانس (Hz)")
+        ax2.set_ylabel("دامنه")
+        ax2.grid(True)
+
+        # Find and annotate peaks for better analysis (optional but very useful)
+        from scipy.signal import find_peaks
+        peaks, _ = find_peaks(amplitude, height=0.01) # height threshold to avoid noise peaks
+        for peak_idx in peaks:
+            freq_peak = xf_pos[peak_idx]
+            amp_peak = amplitude[peak_idx]
+            if amp_peak > 0.05: # Only annotate significant peaks
+                ax2.annotate(f"{freq_peak:.1f} Hz", (freq_peak, amp_peak),
+                             textcoords="offset points", xytext=(0,5), ha='center', color='red')
+
+
+        self.fft_figure.tight_layout(pad=3.0)
+        self.fft_canvas.draw()
+
 
     def parse_matrix_input(self, matrix_str, is_vector=False):
         try:
@@ -1014,15 +1151,16 @@ class EngineeringCalculator:
                     x_sym = sympy.Symbol('x')
                     # Convert common numpy functions to sympy, if present in func_str
                     # This is a basic conversion, more complex functions might need explicit handling
-                    sympy_func_str = func_str.replace('np.sin', 'sin')\
-                                           .replace('np.cos', 'cos')\
-                                           .replace('np.tan', 'tan')\
-                                           .replace('np.exp', 'exp')\
-                                           .replace('np.log10', 'log') # sympy's log is natural log, log(expr, base) for other bases
-                                           .replace('np.log', 'ln') # sympy's ln or log is natural log
-                                           .replace('np.sqrt', 'sqrt')\
-                                           .replace('pi', 'pi') # sympy has its own pi
-                                           .replace('e', 'E') # sympy has E for Napier's constant
+                    sympy_func_str = func_str.replace('np.sin', 'sin')
+                    sympy_func_str = sympy_func_str.replace('np.cos', 'cos')
+                    sympy_func_str = sympy_func_str.replace('np.tan', 'tan')
+                    sympy_func_str = sympy_func_str.replace('np.exp', 'exp')
+                    # sympy's log is natural log, log(expr, base) for other bases
+                    sympy_func_str = sympy_func_str.replace('np.log10', 'log')
+                    sympy_func_str = sympy_func_str.replace('np.log', 'ln') # sympy's ln or log is natural log
+                    sympy_func_str = sympy_func_str.replace('np.sqrt', 'sqrt')
+                    sympy_func_str = sympy_func_str.replace('pi', 'pi') # sympy has its own pi
+                    sympy_func_str = sympy_func_str.replace('e', 'E') # sympy has E for Napier's constant
 
                     # For log10, SymPy uses log(expr, 10). We need to be careful if "log(" was meant as log10 or ln.
                     # Assuming "log(" from user was log10 and "ln(" was natural log.
