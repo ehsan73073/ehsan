@@ -61,8 +61,8 @@ class EngineeringCalculator:
             ('Complex', 8, 3, 1), ('SpecialFunc', 8, 4, 1),
             ('SysNonlinearEq', 9, 0, 1), ('Optimize', 9, 1, 1),
             ('Polynomials', 9, 2, 1), ('History', 9, 3, 1), ('Vars', 9, 4, 1),
-            ('Settings', 10, 0, 1), ('ProbDist', 10, 1, 2) # Added ProbDist, adjusted Settings span
-            # Row 10: Settings(1), ProbDist(2), Empty(1), Empty(1)
+            ('Settings', 10, 0, 1), ('ProbDist', 10, 1, 2),
+            ('CivilEng', 10, 3, 2) # Added Civil Engineering button
         ]
 
         # Main display
@@ -129,6 +129,8 @@ class EngineeringCalculator:
                 action = self.open_settings_window
             elif text == 'ProbDist':
                 action = self.open_prob_dist_window
+            elif text == 'CivilEng':
+                action = self.open_civil_engineering_window
             else: # Standard calculator buttons
                 action = lambda t=text: self.on_button_click(t)
 
