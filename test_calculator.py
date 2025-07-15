@@ -212,6 +212,45 @@ class TestEngineeringCalculatorLogic(unittest.TestCase):
         if os.path.exists(test_config_file):
             os.remove(test_config_file)
 
+    def test_beam_analysis_calculation(self):
+        """Test the Civil Engineering beam analysis calculation."""
+        # This requires the civil engineering window and its widgets to exist.
+        # We can call the creation method directly to ensure widgets are there.
+        self.app.open_civil_engineering_window()
+
+        # Set input values for a known scenario
+        L, w, E, I = 5.0, 10000.0, 200e9, 8.33e-6
+        self.app.beam_L_entry.delete(0, tk.END)
+        self.app.beam_L_entry.insert(0, str(L))
+        self.app.beam_w_entry.delete(0, tk.END)
+        self.app.beam_w_entry.insert(0, str(w))
+        self.app.beam_E_entry.delete(0, tk.END)
+        self.app.beam_E_entry.insert(0, str(E))
+        self.app.beam_I_entry.delete(0, tk.END)
+        self.app.beam_I_entry.insert(0, str(I))
+
+        # Expected results
+        expected_max_moment = (w * L**2) / 8
+        expected_max_deflection = (5 * w * L**4) / (384 * E * I)
+
+        # Mock the result display to capture the output
+        with patch.object(self.app, '_display_beam_result') as mock_display:
+            self.app.calculate_beam_analysis()
+
+            # Check that the display function was called
+            mock_display.assert_called_once()
+
+            # Get the string that was passed to the display function
+            call_args = mock_display.call_args[0]
+            result_string = call_args[0]
+
+            # Verify the calculated values are in the output string
+            self.assertIn(f"{expected_max_moment:.4g}", result_string)
+            self.assertIn(f"{expected_max_deflection:.4g}", result_string)
+
+        # Close the engineering window to avoid clutter if tests continue
+        self.app.civil_eng_window.destroy()
+
 
 # To run these tests from the command line:
 # python -m unittest test_calculator.py
